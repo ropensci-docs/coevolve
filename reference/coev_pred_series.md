@@ -1,0 +1,125 @@
+# Predict a co-evolutionary time series from a fitted `coevfit` object
+
+This function produces predicted values of traits over a time series,
+given the estimated parameters for a `coevfit` model. This function is
+used under the hood by the plotting function `coev_pred_series`.
+
+## Usage
+
+``` r
+coev_pred_series(
+  object,
+  eta_anc = NULL,
+  intervention_values = NULL,
+  tmax = 1,
+  ntimes = 30,
+  ndraws = NULL,
+  stochastic = FALSE
+)
+```
+
+## Arguments
+
+- object:
+
+  An object of class `coevfit`
+
+- eta_anc:
+
+  If `NULL` (default), the starting values for the latent states
+  \\\eta\\ will be set to the estimated ancestral states at the root
+  from the `coevfit` model. Otherwise, a named list with length equal to
+  the number of variables specifying the initial \\\eta\\ values. All
+  variable names must be included in this list.
+
+- intervention_values:
+
+  Either `NULL` (the default) or a named list of variables and
+  associated intervention values. If `NULL`, all traits are free to
+  vary. Otherwise, all coevolving variables must be declared separately
+  in the named list without repetition. If the intervention value for a
+  particular variable is set to NA, this variable is treated as a free
+  variable. If the intervention value for a particular variable is
+  specified, the variable is held constant at this trait value in the
+  calculation. At least one variable must be declared as a free variable
+  and at least one variable must be held constant (e.g.,
+  `list(var1 = NA, var2 = 0)`).
+
+- tmax:
+
+  A positive number indicating the total duration of time for which to
+  predict. Set to 1 by default, corresponding to the entire time depth
+  of the original phylogenetic tree(s).
+
+- ntimes:
+
+  A positive integer indicating the total number of discrete time steps
+  over which to make predictions. Each step corresponds to a time
+  difference of dt = tmax/ntimes. Set to 30 by default.
+
+- ndraws:
+
+  An integer indicating the number of draws to return. The default and
+  maximum number of draws is the size of the posterior sample.
+
+- stochastic:
+
+  Logical (defaults to `FALSE`); indicator of whether predictions should
+  include only the expected co-evolutionary change due to deterministic
+  selection (FALSE) or also stochastic drift (TRUE). Incompatible with
+  the 'intervention_values' argument.
+
+## Value
+
+An \[ndraw, ntimes, nvariables\] array of predicted \\\eta\\ values
+
+## See also
+
+[`coev_plot_pred_series`](https://docs.ropensci.org/coevolve/reference/coev_plot_pred_series.md)
+
+## Author
+
+Scott Claessens <scott.claessens@gmail.com>, Erik Ringen
+<erikjacob.ringen@uzh.ch>
+
+## Examples
+
+``` r
+if (FALSE) { # \dontrun{
+# fit dynamic coevolutionary model
+fit <- coev_fit(
+  data = authority$data,
+  variables = list(
+    political_authority = "ordered_logistic",
+    religious_authority = "ordered_logistic"
+  ),
+  id = "language",
+  tree = authority$phylogeny,
+  # additional arguments for cmdstanr::sample()
+  chains = 4,
+  parallel_chains = 4,
+  seed = 1
+  )
+
+# simulate trait co-evolution
+sims <- coev_pred_series(
+  object = fit,
+  stochastic = TRUE
+  )
+
+# expected trait co-evolution, no drift
+epreds <- coev_pred_series(
+  object = fit,
+  stochastic = FALSE,
+  eta_anc = list(political_authority = -2, religious_authority = 1.5)
+  )
+
+# expected trait co-evolution under intervention, no drift
+epreds_intervention <- coev_pred_series(
+  object = fit,
+  stochastic = FALSE,
+  intervention_values = list(political_authority = NA,
+                             religious_authority = 1.5)
+  )
+} # }
+```

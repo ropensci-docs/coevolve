@@ -1,0 +1,148 @@
+# Handling missing data
+
+## Introduction
+
+Often in comparative datasets, data will be missing for some taxa.
+Rather than remove cases if they have any missing data, the
+[`coev_fit()`](https://docs.ropensci.org/coevolve/reference/coev_fit.md)
+function will automatically impute any missing values in the model,
+using all available information.
+
+## Handling missing data
+
+The observational model for generalized dynamic phylogenetic models is:
+
+\\ \begin{split} y\_{i,j} &\sim f(\mu\_{i,j}, \phi_j) \\ g(\mu\_{i,j})
+&= \pmb{\eta}\_{i,j} \end{split} \\
+
+where \\y\_{i,j}\\ is the observed value for trait \\j\\ from taxa
+\\i\\, \\f()\\ is a likelihood function with expected value \\\mu\\ and
+possible additional parameters \\\phi\\, \\g()\\ is a link function
+converting the expected value to the latent continuous space of the
+evolutionary process, and \\\pmb{\eta}\_{i,j}\\ is the latent trait
+value of trait \\j\\ for taxa \\i\\.
+
+When data are missing for \\y\_{i,j}\\, the model will use Bayesian
+imputation. It will continue to estimate \\\pmb{\eta}\_{i,j}\\ using
+information about phylogenetic relatedness and observed trait
+covariation. This is preferred as the model will use all available
+information in its inferences, rather than throw away information by
+deleting taxa with missing data.
+
+## A working example
+
+We show this by modelling the coevolutionary relationships between brain
+weight and group size across 21 primate species from the Lemuriformes
+clade. Data on primate species were compiled by DeCasien et al. (2017).
+There are data for 143 primate species in total, but we focus on one
+clade to keep the example small and simple.
+
+``` r
+
+# filter dataset to Lemuriformes only
+primates_data <- primates$data[primates$data$clade == "Lemuriformes",]
+
+# prune phylogeny to Lemuriformes only
+library(ape)
+primates_phylogeny <- keep.tip(primates$phylogeny, primates_data$species)
+
+# view data
+head(primates_data[, c("species", "brain_weight", "group_size")])
+```
+
+                            species brain_weight group_size
+    13                Avahi_laniger    10.251355   2.666667
+    14           Avahi_occidentalis     8.236200         NA
+    44           Cheirogaleus_major     6.119797   5.500000
+    45          Cheirogaleus_medius     2.912291   2.000000
+    54 Daubentonia_madagascariensis    46.344725   1.750000
+    56            Eulemur_coronatus    21.394398   6.950000
+
+Both variables are positive reals, so we use the “gamma_log”
+distribution. While there are no missing data for the brain weight
+variable, some data are missing for the group size variable.
+
+``` r
+
+fit <-
+  coev_fit(
+    data = primates_data,
+    variables = list(
+      brain_weight = "gamma_log",
+      group_size = "gamma_log"
+    ),
+    id = "species",
+    tree = primates_phylogeny,
+    # additional arguments for cmdstanr
+    parallel_chains = 4,
+    iter_sampling = 2000,
+    iter_warmup = 2000,
+    refresh = 0,
+    seed = 1
+  )
+```
+
+    Running MCMC with 4 parallel chains...
+
+    Chain 4 finished in 209.4 seconds.
+    Chain 3 finished in 280.6 seconds.
+    Chain 1 finished in 297.8 seconds.
+    Chain 2 finished in 307.8 seconds.
+
+    All 4 chains finished successfully.
+    Mean chain execution time: 273.9 seconds.
+    Total execution time: 308.0 seconds.
+
+``` r
+
+summary(fit)
+```
+
+    Variables: brain_weight = gamma_log 
+               group_size = gamma_log 
+         Data: primates_data (Number of observations: 21)
+    Phylogeny: primates_phylogeny (Number of trees: 1)
+        Draws: 4 chains, each with iter = 2000; warmup = 2000; thin = 1
+               total post-warmup draws = 8000
+
+    Autoregressive selection effects:
+                 Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    brain_weight    -0.41      0.35 -1.29 -0.01 1.00     6328     4649
+    group_size      -0.77      0.54 -2.01 -0.03 1.00     2051      549
+
+    Cross selection effects:
+                              Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    brain_weight ⟶ group_size     0.50      0.71 -1.05  1.80 1.00     4280     3437
+    group_size ⟶ brain_weight     0.59      0.92 -1.31  2.37 1.00     5114     4939
+
+    Drift parameters:
+                                 Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    sd(brain_weight)                 1.08      0.22  0.71  1.58 1.00     2648     3443
+    sd(group_size)                   0.67      0.44  0.04  1.63 1.00      969     1527
+    cor(brain_weight,group_size)     0.05      0.29 -0.54  0.61 1.00     9006     5373
+
+    Continuous time intercept parameters:
+                 Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    brain_weight    -0.27      0.84 -1.90  1.46 1.00     8288     5943
+    group_size      -0.85      0.77 -2.34  0.68 1.00     8135     5863
+
+    Shape parameters:
+                 Estimate Est.Error 2.5%  97.5% Rhat Bulk_ESS Tail_ESS
+    brain_weight    61.96     59.96 5.82 227.86 1.00      619      603
+    group_size       6.37     16.01 1.42  31.16 1.00      903      715
+
+    Warning: There were 178 divergent transitions after warmup.
+    http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup
+
+Notice that the number of observations is still 21 in the summary
+output, informing us that all observations were retained and any missing
+data were imputed.
+
+If we wanted instead to remove any taxa with missing data, we could set
+`complete_cases = TRUE` when fitting the model.
+
+## References
+
+DeCasien, A. R., Williams, S. A., & Higham, J. P. (2017). Primate brain
+size is predicted by diet but not sociality. *Nature Ecology &
+Evolution*, *1*(5), 0112.

@@ -1,0 +1,151 @@
+# Model comparison
+
+## Introduction
+
+When using phylogenetic comparative methods, often we would like to
+compare different models to one another to gauge their relative support.
+For example, in the software BayesTraits, we might compare two models
+where the rates of evolution for a particular trait are either
+independent of, or dependent on, another trait. We can compare models in
+a similar way with the **coevolve** package.
+
+## A working example
+
+When we set `log_lik = TRUE`, the underlying Stan code for these models
+returns a log likelihood vector for all observations. With this, it is
+possible to compare different models using methods like approximate
+leave-one-out cross-validation.
+
+Below, we compare two models to see whether political and religious
+authority evolved independently in Austronesian societies, or whether
+the evolution of each trait depends on the other trait. First, we fit a
+“dependent” model:
+
+``` r
+
+fit_dependent <-
+  coev_fit(
+    data = authority$data,
+    variables = list(
+      political_authority = "ordered_logistic",
+      religious_authority = "ordered_logistic"
+    ),
+    id = "language",
+    tree = authority$phylogeny,
+    estimate_correlated_drift = FALSE,
+    log_lik = TRUE,
+    parallel_chains = 4,
+    iter_sampling = 2000,
+    iter_warmup = 2000,
+    refresh = 0,
+    seed = 1
+  )
+```
+
+    Running MCMC with 4 parallel chains...
+
+    Chain 2 finished in 438.8 seconds.
+    Chain 4 finished in 439.9 seconds.
+    Chain 3 finished in 440.3 seconds.
+    Chain 1 finished in 459.9 seconds.
+
+    All 4 chains finished successfully.
+    Mean chain execution time: 444.7 seconds.
+    Total execution time: 460.1 seconds.
+
+Second, we fit an “independent” model where the two traits evolve
+independently. To do this, we first need to construct an effects matrix
+to tell the model which effects to estimate. By default, all effects are
+estimated. With the effects matrix below, we turn off the
+cross-selection effects, such that only the autoregressive effects are
+estimated.
+
+``` r
+
+effects_mat <-
+  matrix(
+    c(TRUE, FALSE, FALSE, TRUE),
+    nrow = 2,
+    ncol = 2,
+    dimnames = list(
+      c("political_authority", "religious_authority"),
+      c("political_authority", "religious_authority")
+    )
+  )
+
+effects_mat
+```
+
+                        political_authority religious_authority
+    political_authority                TRUE               FALSE
+    religious_authority               FALSE                TRUE
+
+Then we feed this effects matrix to the
+[`coev_fit()`](https://docs.ropensci.org/coevolve/reference/coev_fit.md)
+function:
+
+``` r
+
+fit_independent <-
+  coev_fit(
+    data = authority$data,
+    variables = list(
+      political_authority = "ordered_logistic",
+      religious_authority = "ordered_logistic"
+    ),
+    id = "language",
+    tree = authority$phylogeny,
+    effects_mat = effects_mat,
+    estimate_correlated_drift = FALSE,
+    log_lik = TRUE,
+    parallel_chains = 4,
+    iter_sampling = 2000,
+    iter_warmup = 2000,
+    refresh = 0,
+    seed = 1
+  )
+```
+
+    Running MCMC with 4 parallel chains...
+
+    Chain 2 finished in 181.1 seconds.
+    Chain 1 finished in 196.7 seconds.
+    Chain 3 finished in 203.4 seconds.
+    Chain 4 finished in 208.4 seconds.
+
+    All 4 chains finished successfully.
+    Mean chain execution time: 197.4 seconds.
+    Total execution time: 208.7 seconds.
+
+Once we have fitted both models, we can use the
+[`loo_compare()`](https://mc-stan.org/loo/reference/loo_compare.html)
+function from the [loo](https://mc-stan.org/loo/index.html) package to
+compare them:
+
+``` r
+
+library(loo)
+loo_compare(
+  list(
+    fit_dependent   = fit_dependent$fit$loo(),
+    fit_independent = fit_independent$fit$loo()
+  )
+)
+```
+
+               model elpd_diff se_diff p_worse diag_diff diag_elpd
+       fit_dependent       0.0     0.0      NA                    
+     fit_independent     -23.7     4.5    1.00                    
+
+Usually, we would like to see a difference in expected log predictive
+density (`elpd_diff`) to be greater than two standard errors to
+determine support for one model over another. In this case, the model
+comparison prefers the dependent model over the independent model,
+suggesting that the two traits likely influenced one another in their
+evolution.
+
+This model comparison might also be useful to, for example, compare
+models with and without spatial controls, or with and without correlated
+drift. However, currently it is not possible to compare models that
+include different coevolving variables, as the datasets and resulting
+log likelihood vectors vary between models.

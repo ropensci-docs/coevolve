@@ -1,0 +1,144 @@
+# Controlling for spatial locations
+
+## Introduction
+
+If we have data on the longitudes and latitudes of taxa, sometimes it is
+useful to control for this spatial location to ensure that our model is
+capturing deep ancestral relationships rather than shared environmental
+effects or more recent diffusion among neighbours.
+
+The `lon_lat` argument in the
+[`coev_fit()`](https://docs.ropensci.org/coevolve/reference/coev_fit.md)
+function allows us to easily control for spatial proximity. This
+argument takes a data frame of longitude and latitude coordinates (in
+decimal degrees) for taxa on the phylogeny. If longitude and latitude
+values are inputted by the user, the function calculates the Euclidean
+distances between these points on a unit sphere and includes a Gaussian
+process over these distances for each variable in the model.
+
+## A working example
+
+When studying the coevolution of political and religious authority in
+Austronesian societies, we would like to ensure that our results are due
+to coevolution over deep cultural time rather than more recent borrowing
+among societies with close geographic proximity.
+
+Here are the longitude and latitude values for the first five
+Austronesian societies:
+
+``` r
+
+authority$coordinates[1:5, ]
+```
+
+    # A tibble: 5 × 3
+      id             latitude longitude
+      <chr>             <dbl>     <dbl>
+    1 Aiwoo             -10.3      166.
+    2 Alune              -3.1      128.
+    3 AnejomAneityum    -20.2      170.
+    4 Anuta             -11.6      170.
+    5 Atoni              -9.7      124.
+
+We can include these spatial coordinates in the model. The distance
+matrix is scaled to vary between 0 and 1 under the hood to improve model
+sampling.
+
+``` r
+
+fit <-
+  coev_fit(
+    data = authority$data,
+    variables = list(
+      political_authority = "ordered_logistic",
+      religious_authority = "ordered_logistic"
+    ),
+    id = "language",
+    tree = authority$phylogeny,
+    # declare longitude and latitude values
+    lon_lat = authority$coordinates,
+    # set manual prior
+    prior = list(A_offdiag = "normal(0, 2)"),
+    # additional arguments for cmdstanr
+    parallel_chains = 4,
+    iter_sampling = 2000,
+    iter_warmup = 2000,
+    refresh = 0,
+    seed = 1
+  )
+```
+
+    Running MCMC with 4 parallel chains...
+
+    Chain 4 finished in 663.9 seconds.
+    Chain 3 finished in 666.8 seconds.
+    Chain 1 finished in 937.3 seconds.
+    Chain 2 finished in 948.6 seconds.
+
+    All 4 chains finished successfully.
+    Mean chain execution time: 804.1 seconds.
+    Total execution time: 948.8 seconds.
+
+``` r
+
+summary(fit)
+```
+
+    Variables: political_authority = ordered_logistic 
+               religious_authority = ordered_logistic 
+         Data: authority$data (Number of observations: 97)
+    Phylogeny: authority$phylogeny (Number of trees: 1)
+        Draws: 4 chains, each with iter = 2000; warmup = 2000; thin = 1
+               total post-warmup draws = 8000
+
+    Autoregressive selection effects:
+                        Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    political_authority    -0.72      0.55 -2.05 -0.02 1.00     5213     3202
+    religious_authority    -0.74      0.57 -2.11 -0.03 1.00     5142     3170
+
+    Cross selection effects:
+                                              Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    political_authority ⟶ religious_authority     1.85      1.25 -0.75  4.25 1.00     2799     2793
+    religious_authority ⟶ political_authority     1.58      1.32 -1.17  4.14 1.00     2792     3400
+
+    Drift parameters:
+                                                 Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    sd(political_authority)                          1.25      0.74  0.09  2.79 1.00     1677     3694
+    sd(religious_authority)                          0.96      0.66  0.04  2.43 1.00     2048     3443
+    cor(political_authority,religious_authority)     0.12      0.33 -0.54  0.71 1.00     6632     5947
+
+    Continuous time intercept parameters:
+                        Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    political_authority     0.38      0.96 -1.50  2.28 1.00     9242     5774
+    religious_authority     0.38      0.97 -1.50  2.26 1.00     9177     5522
+
+    Ordinal cutpoint parameters:
+                           Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    political_authority[1]    -1.56      1.03 -3.58  0.50 1.00     6188     5898
+    political_authority[2]    -0.83      1.02 -2.81  1.20 1.00     5682     6007
+    political_authority[3]     1.31      1.06 -0.72  3.44 1.00     4159     5082
+    religious_authority[1]    -1.90      1.05 -3.96  0.18 1.00     6116     4866
+    religious_authority[2]    -1.19      1.04 -3.23  0.88 1.00     6325     5471
+    religious_authority[3]     1.51      1.08 -0.60  3.70 1.00     5441     5222
+
+    Gaussian Process parameters for distances:
+                              Estimate Est.Error 2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    rho(political_authority)      0.10      0.07 0.04  0.22 1.00      860     1169
+    rho(religious_authority)      0.07      0.05 0.03  0.18 1.00      782      456
+    sdgp(political_authority)     1.86      0.76 0.59  3.61 1.00     2300     1541
+    sdgp(religious_authority)     2.37      0.79 1.04  4.19 1.00     2136     2029
+
+    Warning: There were 13 divergent transitions after warmup.
+    http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup
+
+The summary output shows that the model has estimated the parameters for
+two Gaussian process functions over geographic locations, one for each
+variable.
+
+In addition, it is possible to change the underlying covariance kernel
+for the Gaussian processes using the `dist_cov` argument and estimate
+approximate Hilbert-space Gaussian processes using the `dist_k`
+argument. The latter may be particularly useful for large datasets where
+exact Gaussian processes are intractable. See
+[`help(coev_fit)`](https://docs.ropensci.org/coevolve/reference/coev_fit.md)
+for more details.

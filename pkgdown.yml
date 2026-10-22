@@ -1,0 +1,18 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  ancestral_states: ancestral_states.html
+  coevolve: coevolve.html
+  compare: compare.html
+  jax: jax.html
+  missing: missing.html
+  multiphylo: multiphylo.html
+  priors: priors.html
+  repeated: repeated.html
+  scaling: scaling.html
+  spatial: spatial.html
+last_built: 2026-10-22T10:27Z
+urls:
+  reference: https://docs.ropensci.org/coevolve/reference
+  article: https://docs.ropensci.org/coevolve/articles

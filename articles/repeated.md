@@ -1,0 +1,152 @@
+# Accounting for repeated observations
+
+## Introduction
+
+A common feature of comparative datasets is repeated observations. In
+many analyses, we only have one observation per taxon. But often there
+will be more than one observation for each taxon, such as when we have
+observed multiple individuals of the same species. In these cases, it
+can be useful to include all of these observations in the model and
+estimate the residual variation that is not due to the coevolutionary
+process.
+
+## Accounting for repeated observations
+
+When repeated observations are present, we add taxon-level varying
+intercepts \\\alpha\\ to the model as follows:
+
+\\ \begin{split} y\_{i,j} &\sim f(\mu\_{i,j}, \phi_j) \\ g(\mu\_{i,j})
+&= \pmb{\eta}\_{i,j} + \alpha\_{i,j} \\ \alpha\_{i,j} &\sim N(0, \Sigma)
+\end{split} \\
+
+where \\y\_{i,j}\\ is the observed value for trait \\j\\ from taxa
+\\i\\, \\f()\\ is a likelihood function with expected value \\\mu\\ and
+possible additional parameters \\\phi\\, \\g()\\ is a link function
+converting the expected value to the latent continuous space of the
+evolutionary process, \\\pmb{\eta}\_{i,j}\\ is the latent trait value of
+trait \\j\\ for taxa \\i\\, \\\alpha\_{i,j}\\ is the taxon-level varying
+intercept for trait \\j\\ for taxa \\i\\, and \\\Sigma\\ is a \\j\\ x
+\\j\\ variance-covariance matrix for the varying intercepts. The varying
+effects represent within-species/population variance in the latent trait
+values.
+
+## A working example
+
+We show this using an example dataset from de Villemereuil & Nakagawa
+(2014). Suppose we have measured two continuous variables (\\x\\ and
+\\y\\) for 20 species, with five observations for each species.
+
+``` r
+
+head(repeated$data)
+```
+
+      species         x         y
+    1    sp_1 11.223724 107.41919
+    2    sp_1  9.805934 109.16403
+    3    sp_1 10.308423  91.88672
+    4    sp_1  8.355349 121.54341
+    5    sp_1 11.854510 105.31638
+    6    sp_2  4.314015  64.99859
+
+We can fit the dynamic coevolutionary model to this dataset.
+
+``` r
+
+fit <-
+  coev_fit(
+    data = repeated$data,
+    variables = list(
+      x = "normal",
+      y = "normal"
+    ),
+    id = "species",
+    tree = repeated$phylogeny,
+    # additional arguments for cmdstanr
+    parallel_chains = 4,
+    iter_warmup = 2000,
+    iter_sampling = 2000,
+    refresh = 0,
+    seed = 1
+  )
+```
+
+    Running MCMC with 4 parallel chains...
+
+    Chain 3 finished in 278.9 seconds.
+    Chain 4 finished in 289.5 seconds.
+    Chain 1 finished in 376.3 seconds.
+    Chain 2 finished in 381.4 seconds.
+
+    All 4 chains finished successfully.
+    Mean chain execution time: 331.5 seconds.
+    Total execution time: 381.6 seconds.
+
+``` r
+
+summary(fit)
+```
+
+    Variables: x = normal 
+               y = normal 
+         Data: repeated$data (Number of observations: 100)
+    Phylogeny: repeated$phylogeny (Number of trees: 1)
+        Draws: 4 chains, each with iter = 2000; warmup = 2000; thin = 1
+               total post-warmup draws = 8000
+
+    Autoregressive selection effects:
+      Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    x    -1.59      0.77 -3.20 -0.23 1.00     5611     3113
+    y    -1.34      0.71 -2.83 -0.13 1.00     5226     2942
+
+    Cross selection effects:
+          Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    x ⟶ y     0.43      0.85 -1.23  2.11 1.00     6797     6039
+    y ⟶ x     0.04      0.88 -1.68  1.76 1.00     6401     5979
+
+    Drift parameters:
+             Estimate Est.Error 2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    sd(x)        2.94      0.32 2.36  3.61 1.00     3880     5282
+    sd(y)        2.58      0.30 2.05  3.22 1.00     4580     5045
+    cor(x,y)     0.87      0.07 0.70  0.96 1.00     3061     4116
+
+    Continuous time intercept parameters:
+      Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    x    -0.05      0.77 -1.56  1.41 1.00     7103     5863
+    y     0.04      0.74 -1.43  1.47 1.00     7364     6014
+
+    Residual parameters:
+             Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    sd(x)        0.28      0.02  0.24  0.33 1.00     8521     5834
+    sd(y)        0.29      0.02  0.25  0.34 1.00     9510     6095
+    cor(x,y)    -0.18      0.10 -0.38  0.02 1.00     8512     6270
+
+    Warning: There were 17 divergent transitions after warmup. http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup
+
+In the model output, we can see that
+[`coev_fit()`](https://docs.ropensci.org/coevolve/reference/coev_fit.md)
+has detected the presence of repeated observations and has consequently
+modelled residual standard deviation and residual correlation parameters
+for \\x\\ and \\y\\.
+
+If we wanted to remove the additional varying effects structure when
+repeated observations are present, we could set
+`estimate_residual = FALSE` when fitting the model.
+
+## Limitations of repeated observations models
+
+We do not recommend modelling residual standard deviations in cases
+where repeated observations are present for some traits but not others,
+as there will be no within-species variance for traits without repeated
+observations.
+
+In addition, note that models with repeated observations for mixtures of
+continuous and non-continuous traits are currently considered
+experimental and should be treated with caution.
+
+## References
+
+de Villemereuil P. & Nakagawa, S. (2014). General quantitative genetic
+methods for comparative biology. In L. Garamszegi (Ed.), *Modern
+phylogenetic comparative methods and their application in evolutionary
+biology: concepts and practice* (pp. 287-303). Springer, New York.
