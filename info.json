@@ -1,0 +1,13 @@
+{
+  "commit": {
+    "commit": "3127deefeb451dcc1c0d4cd89d33570f9a08b0b3",
+    "author": "Scott Claessens <scott.claessens@gmail.com>",
+    "time": "2026-11-17T11:26:08Z",
+    "files": 1,
+    "merge": false,
+    "message": "Update NEWS"
+  },
+  "repo": "https://github.com/ropensci/coevolve",
+  "pkg": "coevolve",
+  "time": "2026-11-17T12:39:33Z"
+}

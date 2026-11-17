@@ -1,0 +1,98 @@
+# Accelerated sampling using JAX and nutpie
+
+## Introduction
+
+By default, the package generates the model in Stan and fits the model
+using the **cmdstanr** package. However, it is also possible to fit the
+model using JAX and **nutpie**. The key argument is `nuts_sampler` in
+the
+[`coev_fit()`](https://docs.ropensci.org/coevolve/reference/coev_fit.md)
+function:
+
+- `nuts_sampler = "stan"` (default): Stan model via **CmdStan** /
+  **cmdstanr** (Stan’s built-in HMC/NUTS).
+- `nuts_sampler = "nutpie"`: uses JAX to compute gradients and
+  **nutpie**’s Rust NUTS sampler for fast, parallel sampling.
+
+JAX and nutpie offer potentially faster walltimes and more efficient
+parallelising over samples of trees compared to **cmdstanr**.
+
+## Setup
+
+The nutpie backend requires Python with JAX, NumPyro, and nutpie.
+Install them with:
+
+``` bash
+pip install jax numpyro nutpie
+```
+
+Python dependencies are managed automatically via `reticulate`’s `uv`
+environment. The project `.Rprofile` sets
+`RETICULATE_PYTHON = "managed"` by default, so `reticulate` will install
+the required packages on first use. To pin a specific Python instead,
+set `RETICULATE_PYTHON` before `reticulate` initialises:
+
+``` r
+
+Sys.setenv(RETICULATE_PYTHON = "/path/to/python")
+```
+
+## A working example
+
+We can fit an example model with JAX and nutpie by setting
+`nuts_sampler = "nutpie"` in the call to
+[`coev_fit()`](https://docs.ropensci.org/coevolve/reference/coev_fit.md):
+
+``` r
+
+fit <-
+  coev_fit(
+    data = authority$data,
+    variables = list(
+      political_authority = "ordered_logistic",
+      religious_authority = "ordered_logistic"
+    ),
+    id = "language",
+    tree = authority$phylogeny,
+    nuts_sampler = "nutpie"
+  )
+
+summary(fit)
+```
+
+    Variables: political_authority = ordered_logistic 
+               religious_authority = ordered_logistic 
+         Data: authority$data (Number of observations: 97)
+    Phylogeny: authority$phylogeny (Number of trees: 1)
+        Draws: 4 chains, each with iter = 1000; warmup = 1000; thin = 1
+               total post-warmup draws = 4000
+
+    Autoregressive selection effects:
+                        Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    political_authority    -0.51      0.43 -1.61 -0.01 1.00     1083      939
+    religious_authority    -0.62      0.47 -1.76 -0.02 1.00     1594     1334
+
+    Cross selection effects:
+                                              Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    political_authority ⟶ religious_authority     1.53      0.76 -0.10  2.95 1.00      870     1346
+    religious_authority ⟶ political_authority     1.07      0.84 -0.57  2.71 1.00      644     1886
+
+    Drift parameters:
+                                                 Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    sd(political_authority)                          2.18      0.84  0.43  3.74 1.00      467      541
+    sd(religious_authority)                          1.43      0.85  0.07  3.11 1.01      439      664
+    cor(political_authority,religious_authority)     0.36      0.31 -0.37  0.83 1.00     1585     1789
+
+    Continuous time intercept parameters:
+                        Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    political_authority     0.29      0.93 -1.53  2.07 1.00     1604     2472
+    religious_authority     0.31      0.93 -1.59  2.11 1.00     1632     2174
+
+    Ordinal cutpoint parameters:
+                           Estimate Est.Error  2.5% 97.5% Rhat Bulk_ESS Tail_ESS
+    political_authority[1]    -1.51      0.88 -3.20  0.21 1.00     1335     2506
+    political_authority[2]    -0.75      0.85 -2.42  0.90 1.00     1667     2591
+    political_authority[3]     1.45      0.87 -0.25  3.18 1.00     1923     2557
+    religious_authority[1]    -1.59      0.92 -3.44  0.26 1.00     1265     2207
+    religious_authority[2]    -0.92      0.89 -2.68  0.85 1.00     1372     2400
+    religious_authority[3]     1.44      0.90 -0.30  3.28 1.00     1809     2748
